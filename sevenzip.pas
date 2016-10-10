@@ -933,7 +933,9 @@ constructor T7zPlugin.Create(const lib: string);
 begin
   FHandle := LoadLibrary(PChar(lib));
   if FHandle = 0 then
-    raise exception.CreateFmt('Error loading library %s', [lib]);
+  begin
+    RaiseLastOSError(GetLastError, Format(#13#10'Error loading library %s', [lib]));
+  end;
   FCreateObject := GetProcAddress(FHandle, 'CreateObject');
   if not (Assigned(FCreateObject)) then
   begin
