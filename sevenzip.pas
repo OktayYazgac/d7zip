@@ -477,6 +477,7 @@ CODER_INTERFACE(ICompressSetCoderProperties, 0x21)
     function GetItemIsFolder(const index: integer): boolean; stdcall;
     function GetInArchive: IInArchive;
     procedure ExtractItem(const item: Cardinal; Stream: TStream; test: longbool); stdcall;
+    procedure ExtractItemToPath(const item: Cardinal; const path: string; test: longbool); stdcall;
     procedure ExtractItems(items: PCardArray; count: cardinal; test: longbool;
       sender: pointer; callback: T7zGetStreamCallBack); stdcall;
     procedure ExtractAll(test: longbool; sender: pointer; callback: T7zGetStreamCallBack); stdcall;
@@ -840,6 +841,7 @@ type
     function GetItemSize(const index: integer): Cardinal; stdcall; stdcall;
     function GetItemIsFolder(const index: integer): boolean; stdcall;
     procedure ExtractItem(const item: Cardinal; Stream: TStream; test: longbool); stdcall;
+    procedure ExtractItemToPath(const item: Cardinal; const path: string; test: longbool); stdcall;
     procedure ExtractItems(items: PCardArray; count: cardinal; test: longbool; sender: pointer; callback: T7zGetStreamCallBack); stdcall;
     procedure SetPasswordCallback(sender: Pointer; callback: T7zPasswordCallback); stdcall;
     procedure SetProgressCallback(sender: Pointer; callback: T7zProgressCallback); stdcall;
@@ -1090,6 +1092,18 @@ function T7zInArchive.GetItemProp(const Item: Cardinal;
   prop: PROPID): OleVariant;
 begin
   FInArchive.GetProperty(Item, prop, Result);
+end;
+
+procedure T7zInArchive.ExtractItemToPath(const item: Cardinal; const path: string; test: longbool); stdcall;
+begin
+  FExtractPath := IncludeTrailingPathDelimiter(path);
+  try
+    if test then
+      RINOK(FInArchive.Extract(@item, 1, 1, self as IArchiveExtractCallback)) else
+      RINOK(FInArchive.Extract(@item, 1, 0, self as IArchiveExtractCallback));
+  finally
+    FExtractPath := '';
+  end;
 end;
 
 procedure T7zInArchive.ExtractItem(const item: Cardinal; Stream: TStream; test: longbool); stdcall;
