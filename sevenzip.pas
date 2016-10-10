@@ -13,13 +13,15 @@
 (* V1.2                                                                         *)
 (********************************************************************************)
 
-unit sevenzip;
+unit SevenZip;
 {$ALIGN ON}
 {$MINENUMSIZE 4}
 {$WARN SYMBOL_PLATFORM OFF}	
 
 interface
-uses SysUtils, Windows, ActiveX, Classes, Contnrs;
+uses
+  Winapi.Windows, Winapi.ActiveX,
+  System.SysUtils, System.Classes, System.Contnrs;
 
 type
   PVarType = ^TVarType;
@@ -465,6 +467,8 @@ CODER_INTERFACE(ICompressSetCoderProperties, 0x21)
     var outStream: ISequentialOutStream): HRESULT; stdcall;
   T7zProgressCallback = function(sender: Pointer; total: boolean; value: int64): HRESULT; stdcall;
 
+  T7zProgressCallbackEx = reference to function(total: boolean; value: int64): HRESULT;
+
   I7zInArchive = interface
   ['{022CF785-3ECE-46EF-9755-291FA84CC6C9}']
     procedure OpenFile(const filename: string); stdcall;
@@ -485,6 +489,7 @@ CODER_INTERFACE(ICompressSetCoderProperties, 0x21)
     procedure SetPasswordCallback(sender: Pointer; callback: T7zPasswordCallback); stdcall;
     procedure SetPassword(const password: UnicodeString); stdcall;
     procedure SetProgressCallback(sender: Pointer; callback: T7zProgressCallback); stdcall;
+    procedure SetProgressCallbackEx(callback: T7zProgressCallbackEx); stdcall;
     procedure SetClassId(const classid: TGUID);
     function GetClassId: TGUID;
     property ClassId: TGUID read GetClassId write SetClassId;
@@ -506,6 +511,7 @@ CODER_INTERFACE(ICompressSetCoderProperties, 0x21)
     procedure SaveToFile(const FileName: TFileName); stdcall;
     procedure SaveToStream(stream: TStream); stdcall;
     procedure SetProgressCallback(sender: Pointer; callback: T7zProgressCallback); stdcall;
+    procedure SetProgressCallbackEx(callback: T7zProgressCallbackEx); stdcall;
     procedure ClearBatch; stdcall;
     procedure SetPassword(const password: UnicodeString); stdcall;
     procedure SetPropertie(name: UnicodeString; value: OleVariant); stdcall;
@@ -819,6 +825,7 @@ type
     FPasswordCallback: T7zPasswordCallback;
     FPasswordSender: Pointer;
     FProgressCallback: T7zProgressCallback;
+    FProgressCallbackEx: T7zProgressCallbackEx;
     FProgressSender: Pointer;
     FStream: TStream;
     FPasswordIsDefined: Boolean;
@@ -845,6 +852,7 @@ type
     procedure ExtractItems(items: PCardArray; count: cardinal; test: longbool; sender: pointer; callback: T7zGetStreamCallBack); stdcall;
     procedure SetPasswordCallback(sender: Pointer; callback: T7zPasswordCallback); stdcall;
     procedure SetProgressCallback(sender: Pointer; callback: T7zProgressCallback); stdcall;
+    procedure SetProgressCallbackEx(callback: T7zProgressCallbackEx); stdcall;
     procedure ExtractAll(test: longbool; sender: pointer; callback: T7zGetStreamCallBack); stdcall;
     procedure ExtractTo(const path: string); stdcall;
     procedure SetPassword(const password: UnicodeString); stdcall;
@@ -878,6 +886,7 @@ type
     FOutArchive: IOutArchive;
     FBatchList: TObjectList;
     FProgressCallback: T7zProgressCallback;
+    FProgressCallbackEx: T7zProgressCallbackEx;
     FProgressSender: Pointer;
     FPassword: UnicodeString;
     function GetOutArchive: IOutArchive;
@@ -891,6 +900,7 @@ type
     procedure SaveToFile(const FileName: TFileName); stdcall;
     procedure SaveToStream(stream: TStream); stdcall;
     procedure SetProgressCallback(sender: Pointer; callback: T7zProgressCallback); stdcall;
+    procedure SetProgressCallbackEx(callback: T7zProgressCallbackEx); stdcall;
     procedure ClearBatch; stdcall;
     procedure SetPassword(const password: UnicodeString); stdcall;
     procedure SetPropertie(name: UnicodeString; value: OleVariant); stdcall;
@@ -1153,7 +1163,10 @@ end;
 function T7zInArchive.SetCompleted(completeValue: PInt64): HRESULT;
 begin
   if Assigned(FProgressCallback) and (completeValue <> nil) then
-    Result := FProgressCallback(FProgressSender, false, completeValue^) else
+    Result := FProgressCallback(FProgressSender, false, completeValue^)
+  else if Assigned(FProgressCallbackEx) and (completeValue <> nil) then
+    Result := FProgressCallbackEx(False, completeValue^)
+  else
     Result := S_OK;
 end;
 
@@ -1171,7 +1184,10 @@ end;
 function T7zInArchive.SetTotal(total: Int64): HRESULT;
 begin
   if Assigned(FProgressCallback) then
-    Result := FProgressCallback(FProgressSender, true, total) else
+    Result := FProgressCallback(FProgressSender, true, total)
+  else if Assigned(FProgressCallbackEx) then
+    Result := FProgressCallbackEx(True, Total)
+  else
     Result := S_OK;
 end;
 
@@ -1258,6 +1274,11 @@ procedure T7zInArchive.SetProgressCallback(sender: Pointer;
 begin
   FProgressSender := sender;
   FProgressCallback := callback;
+end;
+
+procedure T7zInArchive.SetProgressCallbackEx(callback: T7zProgressCallbackEx);
+begin
+  FProgressCallbackEx := callback;
 end;
 
 procedure T7zInArchive.ExtractAll(test: longbool; sender: pointer;
@@ -1470,7 +1491,7 @@ var
         if (f.Name[1] <> '.') then
           Traverse(IncludeTrailingPathDelimiter(p + f.Name));
       until FindNext(f) <> 0;
-      SysUtils.FindClose(f);
+      System.SysUtils.FindClose(f);
     end;
 
     for i := 0 to willlist.Count - 1 do
@@ -1493,7 +1514,7 @@ var
         item.Ownership := soOwned;
         FBatchList.Add(item);
       until FindNext(f) <> 0;
-      SysUtils.FindClose(f);
+      System.SysUtils.FindClose(f);
     end;
   end;
 begin
@@ -1661,7 +1682,10 @@ end;
 function T7zOutArchive.SetCompleted(completeValue: PInt64): HRESULT;
 begin
   if Assigned(FProgressCallback) and (completeValue <> nil) then
-    Result := FProgressCallback(FProgressSender, false, completeValue^) else
+    Result := FProgressCallback(FProgressSender, false, completeValue^)
+  else if Assigned(FProgressCallbackEx) and (completeValue <> nil) then
+    Result := FProgressCallbackEx(false, completeValue^)
+  else
     Result := S_OK;
 end;
 
@@ -1683,6 +1707,11 @@ begin
   FProgressSender := sender;
 end;
 
+procedure T7zOutArchive.SetProgressCallbackEx(callback: T7zProgressCallbackEx);
+begin
+  FProgressCallbackEx := callback;
+end;
+
 procedure T7zOutArchive.SetPropertie(name: UnicodeString;
   value: OleVariant);
 var
@@ -1697,18 +1726,13 @@ end;
 function T7zOutArchive.SetTotal(total: Int64): HRESULT;
 begin
   if Assigned(FProgressCallback) then
-    Result := FProgressCallback(FProgressSender, true, total) else
+    Result := FProgressCallback(FProgressSender, true, total)
+  else if Assigned(FProgressCallbackEx) then
+    Result := FProgressCallbackEx(true, total)
+  else
     Result := S_OK;
 end;
 
 end.
-
-
-
-
-
-
-
-
 
 
